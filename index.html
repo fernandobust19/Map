@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navegación con Google Maps</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            max-width: 400px;
+        }
+        
+        h1 {
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+        }
+        
+        .location-btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin: 10px;
+        }
+        
+        .location-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .location-btn:active {
+            transform: translateY(0);
+        }
+        
+        .location-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 1rem;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            display: none;
+        }
+        
+        .error {
+            background: rgba(255, 0, 0, 0.2);
+        }
+        
+        .success {
+            background: rgba(0, 255, 0, 0.2);
+        }
+        
+        .info {
+            margin-top: 1rem;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        .destination-input {
+            margin: 1rem 0;
+            padding: 10px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            width: 250px;
+            text-align: center;
+        }
+        
+        .navigate-btn {
+            background: linear-gradient(45deg, #4ECDC4, #44A08D);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin: 10px;
+        }
+        
+        .navigate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Navegación Google Maps</h1>
+        
+        <button id="getLocationBtn" class="location-btn">
+            📍 Obtener Mi Ubicación
+        </button>
+        
+        <div id="locationInfo" style="display: none;">
+            <p><strong>Tu ubicación:</strong></p>
+            <p id="coordinates"></p>
+            
+            <input type="text" id="destination" class="destination-input" 
+                   placeholder="Ingresa tu destino (ej: Centro Comercial)">
+            
+            <br>
+            
+            <button id="navigateBtn" class="navigate-btn">
+                🧭 Navegar en Google Maps
+            </button>
+            
+            <button id="currentLocationMapsBtn" class="navigate-btn">
+                📍 Ver Mi Ubicación en Maps
+            </button>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="info">
+            <p>Este sitio necesita acceso a tu ubicación para funcionar correctamente.</p>
+        </div>
+    </div>
+
+    <script>
+        let userLatitude = null;
+        let userLongitude = null;
+        
+        const getLocationBtn = document.getElementById('getLocationBtn');
+        const navigateBtn = document.getElementById('navigateBtn');
+        const currentLocationMapsBtn = document.getElementById('currentLocationMapsBtn');
+        const destinationInput = document.getElementById('destination');
+        const locationInfo = document.getElementById('locationInfo');
+        const coordinatesDisplay = document.getElementById('coordinates');
+        const status = document.getElementById('status');
+        
+        function showStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+        
+        function getLocation() {
+            if (!navigator.geolocation) {
+                showStatus('La geolocalización no es compatible con este navegador.', 'error');
+                return;
+            }
+            
+            getLocationBtn.disabled = true;
+            getLocationBtn.textContent = '🔄 Obteniendo ubicación...';
+            showStatus('Obteniendo tu ubicación...', 'info');
+            
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    userLatitude = position.coords.latitude;
+                    userLongitude = position.coords.longitude;
+                    
+                    coordinatesDisplay.innerHTML = `
+                        Latitud: ${userLatitude.toFixed(6)}<br>
+                        Longitud: ${userLongitude.toFixed(6)}
+                    `;
+                    
+                    locationInfo.style.display = 'block';
+                    getLocationBtn.textContent = '✅ Ubicación Obtenida';
+                    showStatus('¡Ubicación obtenida exitosamente!', 'success');
+                    
+                    setTimeout(() => {
+                        getLocationBtn.disabled = false;
+                        getLocationBtn.textContent = '📍 Actualizar Ubicación';
+                    }, 2000);
+                },
+                function(error) {
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'Permiso denegado para acceder a la ubicación.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Información de ubicación no disponible.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Tiempo de espera agotado para obtener la ubicación.';
+                            break;
+                        default:
+                            errorMessage = 'Error desconocido al obtener la ubicación.';
+                            break;
+                    }
+                    
+                    showStatus(errorMessage, 'error');
+                    getLocationBtn.disabled = false;
+                    getLocationBtn.textContent = '📍 Obtener Mi Ubicación';
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 300000
+                }
+            );
+        }
+        
+        function navigateToDestination() {
+            if (!userLatitude || !userLongitude) {
+                showStatus('Primero debes obtener tu ubicación.', 'error');
+                return;
+            }
+            
+            const destination = destinationInput.value.trim();
+            if (!destination) {
+                showStatus('Por favor ingresa un destino.', 'error');
+                return;
+            }
+            
+            // Crear URL de Google Maps con navegación desde la ubicación actual al destino
+            const mapsUrl = `https://www.google.com/maps/dir/${userLatitude},${userLongitude}/${encodeURIComponent(destination)}`;
+            
+            showStatus('Abriendo Google Maps...', 'success');
+            window.open(mapsUrl, '_blank');
+        }
+        
+        function openCurrentLocationInMaps() {
+            if (!userLatitude || !userLongitude) {
+                showStatus('Primero debes obtener tu ubicación.', 'error');
+                return;
+            }
+            
+            // Crear URL de Google Maps para mostrar la ubicación actual
+            const mapsUrl = `https://www.google.com/maps/@${userLatitude},${userLongitude},17z`;
+            
+            showStatus('Abriendo tu ubicación en Google Maps...', 'success');
+            window.open(mapsUrl, '_blank');
+        }
+        
+        // Event listeners
+        getLocationBtn.addEventListener('click', getLocation);
+        navigateBtn.addEventListener('click', navigateToDestination);
+        currentLocationMapsBtn.addEventListener('click', openCurrentLocationInMaps);
+        
+        // Permitir navegación al presionar Enter en el campo de destino
+        destinationInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                navigateToDestination();
+            }
+        });
+        
+        // Mensaje de bienvenida
+        window.addEventListener('load', function() {
+            showStatus('¡Bienvenido! Haz clic en "Obtener Mi Ubicación" para comenzar.', 'info');
+        });
+    </script>
+</body>
+</html>
