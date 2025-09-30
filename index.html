@@ -14,7 +14,7 @@
     .pac-container { z-index: 50 !important; }
     /* Estilo para botones de sucursal activos */
     .sucursal-btn.active { 
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); 
+      box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.5); /* Verde claro */
       transform: scale(1.02);
       transition: all 0.2s ease;
     }
@@ -75,7 +75,7 @@
         <p class="text-[11px] text-emerald-100 mb-2">Seleccione la sucursal de destino:</p>
         <div class="grid grid-cols-1 gap-2">
           <button id="btnMariscal" 
-            class="sucursal-btn active w-full text-sm px-3 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium border-2 border-indigo-300">
+            class="sucursal-btn active w-full text-sm px-3 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium border-2 border-green-300">
             Sucursal: Mariscal Sucre y Arturo Tipanguano
           </button>
           <button id="btnEcuatoriana" 
@@ -365,13 +365,13 @@
       
       // Actualizar estilos de botones
       document.querySelectorAll('.sucursal-btn').forEach(btn => {
-        btn.classList.remove('active', 'bg-indigo-500', 'hover:bg-indigo-600', 'border-indigo-300');
+        btn.classList.remove('active', 'bg-green-500', 'hover:bg-green-600', 'border-green-300');
         btn.classList.add('bg-white/20', 'hover:bg-white/30', 'border-white/30');
       });
       
       const btnActivo = tipo === 'mariscal' ? btnMariscal : btnEcuatoriana;
       btnActivo.classList.remove('bg-white/20', 'hover:bg-white/30', 'border-white/30');
-      btnActivo.classList.add('active', 'bg-indigo-500', 'hover:bg-indigo-600', 'border-indigo-300');
+      btnActivo.classList.add('active', 'bg-green-500', 'hover:bg-green-600', 'border-green-300');
       
       updateSucursalMarker();
     }
