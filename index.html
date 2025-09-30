@@ -16,7 +16,7 @@
 
   <script>
     // ===== TU CLAVE GOOGLE MAPS =====
-    const GOOGLE_MAPS_API_KEY = "AIzaSyDn3QfrATmrSUiZnyduXRdPujpsIoLp1H8"; // <-- reemplaza por tu clave
+    const GOOGLE_MAPS_API_KEY = "AIzaSyDn3QfrATmrSUiZnyduXRdPujpsIoLp1H8"; // <-- Deja vacío para modo desarrollo (temporal)
     // ===== DESTINO FIJO UPCONS =====
     // Cambia el texto si actualizas dirección oficial.
     const UPCONS_DESTINO_TEXTO = "UPCONS, Av. Mariscal Sucre y Arturo Tipanguano, Quito, Ecuador";
@@ -188,12 +188,11 @@
           geocoder.geocode({ location: latlng }, (results, status) => {
             if (status === "OK" && results[0]) {
               startInput.value = results[0].formatted_address;
-              statusEl.textContent = "Ubicación encontrada. Dibujando ruta...";
+              statusEl.textContent = "Ubicación encontrada. Presione 'Dibujar ruta'.";
             } else {
-              startInput.value = ""; // seguimos permitiendo navegar con Current Location
-              statusEl.textContent = "Ubicación lista. Dibujando ruta...";
+              startInput.value = "Ubicación actual (aproximada)"; // Texto alternativo si no hay dirección
+              statusEl.textContent = "Ubicación lista. Presione 'Dibujar ruta'.";
             }
-            calculateAndDisplayRoute(true); // Dibuja la ruta automáticamente
           });
         },
         err => {
@@ -212,14 +211,13 @@
     }
 
     // Dibujar ruta y luego ocultar panel
-    // El parámetro 'fromGps' indica si la llamada viene del botón de ubicación
-    function calculateAndDisplayRoute(fromGps = false) {
+    function calculateAndDisplayRoute() {
       const startVal = startInput.value.trim();
       const hasOrigin = startVal.length > 0;
 
-      // Si no viene del GPS y no hay texto de origen, no hacer nada.
-      if (!fromGps && !hasOrigin) {
-        alert("Por favor, ingrese una dirección de origen.");
+      // Si no hay texto de origen Y no hay un marcador de GPS, no hacer nada.
+      if (!hasOrigin && !startMarker) {
+        alert("Por favor, ingrese una dirección de origen o use el botón de ubicación.");
         return;
       }
       
@@ -272,8 +270,8 @@
             fitAll(startMarker.getPosition(), endMarker?.getPosition(), path);
             // Guardar datos para navegación
             // Si se usó GPS, el origen es la ubicación actual para la navegación.
-            // Si se escribió una dirección, se usa esa dirección.
-            lastOriginForNav = fromGps ? "Current+Location" : encodeURIComponent(startVal);
+            // Si se escribió una dirección, se usa esa dirección. Si no, se usa la ubicación actual.
+            lastOriginForNav = (startMarker && !hasOrigin) ? "Current+Location" : encodeURIComponent(startVal);
             lastDestForNav = (endInput.dataset.lat && endInput.dataset.lng)
               ? `${endInput.dataset.lat},${endInput.dataset.lng}`
               : encodeURIComponent(UPCONS_DESTINO_TEXTO);
