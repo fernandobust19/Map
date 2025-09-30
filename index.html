@@ -50,8 +50,8 @@
         </div>
         <div class="col-span-2 flex">
           <button id="useLocationBtn" title="Usar mi ubicación"
-            class="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium">
-            GPS
+            class="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-1">
+            Usar mi ubicación
           </button>
         </div>
       </div>
@@ -72,7 +72,7 @@
       </div>
 
       <p id="status" class="mt-2 text-[12px] text-emerald-100/90">
-        Ingrese su origen o use <b>GPS</b>, luego toque <b>Dibujar ruta</b>.
+        Ingrese su origen o use <b>Usar mi ubicación</b> para trazar la ruta.
       </p>
       <p id="httpsHint" class="hidden mt-2 text-[11px] text-amber-200">
         Sírvalo con <b>HTTPS</b> (o <code>localhost</code>) y permita la ubicación para GPS.
@@ -170,7 +170,7 @@
         return;
       }
       statusEl.textContent = "Obteniendo su ubicación...";
-      const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+      const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
 
       navigator.geolocation.getCurrentPosition(
         pos => {
@@ -188,16 +188,17 @@
           geocoder.geocode({ location: latlng }, (results, status) => {
             if (status === "OK" && results[0]) {
               startInput.value = results[0].formatted_address;
-              statusEl.textContent = "Ubicación actual establecida.";
+              statusEl.textContent = "Ubicación encontrada. Dibujando ruta...";
             } else {
               startInput.value = ""; // seguimos permitiendo navegar con Current Location
-              statusEl.textContent = "Ubicación lista (sin dirección legible).";
+              statusEl.textContent = "Ubicación lista. Dibujando ruta...";
             }
+            calculateAndDisplayRoute(true); // Dibuja la ruta automáticamente
           });
         },
         err => {
           if (err.code === err.PERMISSION_DENIED) {
-            statusEl.textContent = "Permiso de ubicación denegado. Habilítelo en el navegador.";
+            statusEl.textContent = "Permiso de ubicación denegado. Revise los ajustes de su navegador para este sitio.";
           } else if (err.code === err.POSITION_UNAVAILABLE) {
             statusEl.textContent = "Ubicación no disponible. Revise GPS o señal.";
           } else if (err.code === err.TIMEOUT) {
@@ -211,15 +212,17 @@
     }
 
     // Dibujar ruta y luego ocultar panel
-    function calculateAndDisplayRoute() {
+    // El parámetro 'fromGps' indica si la llamada viene del botón de ubicación
+    function calculateAndDisplayRoute(fromGps = false) {
       const startVal = startInput.value.trim();
       const hasOrigin = startVal.length > 0;
 
-      if (!hasOrigin && !startMarker) {
-        alert("Ingrese su origen o use GPS.");
+      // Si no viene del GPS y no hay texto de origen, no hacer nada.
+      if (!fromGps && !hasOrigin) {
+        alert("Por favor, ingrese una dirección de origen.");
         return;
       }
-
+      
       statusEl.textContent = "Calculando ruta...";
       clearRoute();
 
@@ -268,7 +271,9 @@
             clearInterval(tick);
             fitAll(startMarker.getPosition(), endMarker?.getPosition(), path);
             // Guardar datos para navegación
-            lastOriginForNav = hasOrigin ? encodeURIComponent(startVal) : "Current+Location";
+            // Si se usó GPS, el origen es la ubicación actual para la navegación.
+            // Si se escribió una dirección, se usa esa dirección.
+            lastOriginForNav = fromGps ? "Current+Location" : encodeURIComponent(startVal);
             lastDestForNav = (endInput.dataset.lat && endInput.dataset.lng)
               ? `${endInput.dataset.lat},${endInput.dataset.lng}`
               : encodeURIComponent(UPCONS_DESTINO_TEXTO);
@@ -288,10 +293,21 @@
     }
 
     function openTurnByTurn() {
+      // Detectar si es iOS para usar Apple Maps
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
       const origin = lastOriginForNav || "Current+Location";
       const dest   = lastDestForNav || encodeURIComponent(UPCONS_DESTINO_TEXTO);
-      const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${encodeURIComponent(dest)}&travelmode=driving&dir_action=navigate`;
-      window.open(url, "_blank");
+      let navUrl;
+
+      if (isIOS) {
+        // URL para Apple Maps. saddr=start, daddr=destination
+        navUrl = `https://maps.apple.com/?saddr=${origin}&daddr=${dest}&dirflg=d`;
+      } else {
+        // URL para Google Maps en otras plataformas (Android, Web)
+        navUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving&dir_action=navigate`;
+      }
+      window.open(navUrl, "_blank");
     }
 
     function fitAll(startPos, endPos, path) {
