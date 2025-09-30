@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ruta hacia UPCONS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    #map { height: 100%; width: 100%; }
+    /* Botón flotante centrado abajo */
+    .nav-fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 20; }
+    /* Corrige z-index del autocompletado */
+    .pac-container { z-index: 50 !important; }
+  </style>
+
+  <script>
+    // ===== TU CLAVE GOOGLE MAPS =====
+    const GOOGLE_MAPS_API_KEY = "AIzaSyDn3QfrATmrSUiZnyduXRdPujpsIoLp1H8"; // <-- reemplaza por tu clave
+    // ===== DESTINO FIJO UPCONS =====
+    // Cambia el texto si actualizas dirección oficial.
+    const UPCONS_DESTINO_TEXTO = "UPCONS, Av. Mariscal Sucre y Arturo Tipanguano, Quito, Ecuador";
+    // ================================
+
+    // Carga Maps + Places
+    (function loadGoogleMaps() {
+      const s = document.createElement('script');
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places&callback=initMap`;
+      s.async = true; s.defer = true;
+      document.head.appendChild(s);
+    })();
+  </script>
+</head>
+<body class="bg-gray-100">
+  <div id="map"></div>
+
+  <!-- Panel compacto y translúcido -->
+  <div id="panel" class="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-[92%] max-w-md">
+    <div class="rounded-2xl shadow-2xl backdrop-blur bg-blue-900/55 border border-white/10 px-3 py-2">
+      <div class="flex items-center justify-between">
+        <h1 class="text-white text-base font-semibold tracking-wide">Ir a <span class="text-emerald-200">UPCONS</span></h1>
+        <button id="centerButton" class="text-white/90 text-xs px-2 py-1 rounded-md hover:bg-white/10">Ver UPCONS</button>
+      </div>
+
+      <!-- Campos súper cortos y pegados -->
+      <div class="mt-2 grid grid-cols-12 gap-1">
+        <div class="col-span-10">
+          <input id="start" type="text" placeholder="Su origen (dirección o lugar)"
+            class="w-full text-sm px-3 py-2 rounded-lg bg-white/90 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-gray-500"/>
+        </div>
+        <div class="col-span-2 flex">
+          <button id="useLocationBtn" title="Usar mi ubicación"
+            class="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium">
+            GPS
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-2 grid grid-cols-12 gap-1">
+        <div class="col-span-12">
+          <input id="end" type="text" value="UPCONS" readonly
+            class="w-full text-sm px-3 py-2 rounded-lg bg-white/70 border border-white/30 text-gray-700"/>
+          <p id="destinoLabel" class="text-[11px] text-emerald-100 mt-1 line-clamp-2"></p>
+        </div>
+      </div>
+
+      <div class="mt-2 flex gap-1">
+        <button id="drawRouteButton"
+          class="flex-1 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2">
+          Dibujar ruta
+        </button>
+      </div>
+
+      <p id="status" class="mt-2 text-[12px] text-emerald-100/90">
+        Ingrese su origen o use <b>GPS</b>, luego toque <b>Dibujar ruta</b>.
+      </p>
+      <p id="httpsHint" class="hidden mt-2 text-[11px] text-amber-200">
+        Sírvalo con <b>HTTPS</b> (o <code>localhost</code>) y permita la ubicación para GPS.
+      </p>
+    </div>
+  </div>
+
+  <!-- Botón flotante de navegación (solo aparece después de trazar) -->
+  <div class="nav-fab">
+    <button id="navigateButton" disabled
+      class="hidden rounded-full shadow-2xl px-5 py-3 text-white font-bold text-sm bg-green-600 hover:bg-green-700">
+      Comenzar a navegar
+    </button>
+  </div>
+
+  <script>
+    let map, directionsService, directionsRenderer, geocoder;
+    let guidePolyline, animatedPolyline, startMarker, endMarker, autocompleteStart;
+
+    const startInput = document.getElementById('start');
+    const endInput   = document.getElementById('end');
+    const statusEl   = document.getElementById('status');
+    const drawBtn    = document.getElementById('drawRouteButton');
+    const gpsBtn     = document.getElementById('useLocationBtn');
+    const centerBtn  = document.getElementById('centerButton');
+    const panel      = document.getElementById('panel');
+    const navBtn     = document.getElementById('navigateButton');
+    const httpsHint  = document.getElementById('httpsHint');
+
+    let lastOriginForNav = null; // "Current+Location" o dirección encodeada
+    let lastDestForNav   = null; // "lat,lng" o texto encodeado
+
+    // Callback global
+    window.initMap = function () {
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        httpsHint.classList.remove('hidden');
+      }
+
+      document.getElementById('destinoLabel').textContent = `Destino fijo: ${UPCONS_DESTINO_TEXTO}`;
+
+      map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: { lat: -0.22985, lng: -78.52495 }, // Quito aprox.
+        mapTypeId: 'roadmap',
+        zoomControl: true,
+        streetViewControl: false,
+        mapTypeControl: false,
+      });
+
+      directionsService = new google.maps.DirectionsService();
+      directionsRenderer = new google.maps.DirectionsRenderer({
+        map,
+        suppressPolylines: true,
+        suppressMarkers: true
+      });
+      geocoder = new google.maps.Geocoder();
+
+      // Autocompletado compacto
+      autocompleteStart = new google.maps.places.Autocomplete(startInput, {
+        // componentRestrictions: { country: ["ec"] } // opcional
+      });
+
+      // Geocodificar destino UPCONS una sola vez
+      geocoder.geocode({ address: UPCONS_DESTINO_TEXTO }, (results, status) => {
+        if (status === "OK" && results[0]) {
+          const destLocation = results[0].geometry.location;
+          endMarker = new google.maps.Marker({
+            map, position: destLocation, title: "UPCONS",
+            icon: { path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, scale: 6,
+                    fillColor: "#60A5FA", fillOpacity: 1, strokeColor: "#1E3A8A", strokeWeight: 1 }
+          });
+          endInput.dataset.lat = destLocation.lat();
+          endInput.dataset.lng = destLocation.lng();
+        } else {
+          statusEl.textContent = "No se pudo fijar el destino UPCONS. Revise la dirección.";
+        }
+      });
+
+      // Eventos
+      drawBtn.addEventListener('click', calculateAndDisplayRoute);
+      gpsBtn.addEventListener('click', setStartToCurrentUserLocation);
+      centerBtn.addEventListener('click', () => {
+        if (endMarker) {
+          map.panTo(endMarker.getPosition());
+          map.setZoom(15);
+        }
+      });
+      navBtn.addEventListener('click', openTurnByTurn);
+    };
+
+    // GPS como origen
+    function setStartToCurrentUserLocation() {
+      if (!('geolocation' in navigator)) {
+        statusEl.textContent = "Su navegador no soporta geolocalización.";
+        return;
+      }
+      statusEl.textContent = "Obteniendo su ubicación...";
+      const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+          if (startMarker) startMarker.setMap(null);
+          startMarker = new google.maps.Marker({
+            map, position: latlng, title: "Mi ubicación",
+            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6,
+                    fillColor: "#10B981", fillOpacity: 1, strokeColor: "#065F46", strokeWeight: 1 }
+          });
+          map.panTo(latlng);
+          map.setZoom(14);
+
+          geocoder.geocode({ location: latlng }, (results, status) => {
+            if (status === "OK" && results[0]) {
+              startInput.value = results[0].formatted_address;
+              statusEl.textContent = "Ubicación actual establecida.";
+            } else {
+              startInput.value = ""; // seguimos permitiendo navegar con Current Location
+              statusEl.textContent = "Ubicación lista (sin dirección legible).";
+            }
+          });
+        },
+        err => {
+          if (err.code === err.PERMISSION_DENIED) {
+            statusEl.textContent = "Permiso de ubicación denegado. Habilítelo en el navegador.";
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            statusEl.textContent = "Ubicación no disponible. Revise GPS o señal.";
+          } else if (err.code === err.TIMEOUT) {
+            statusEl.textContent = "Tiempo de espera agotado. Intente nuevamente.";
+          } else {
+            statusEl.textContent = "No se pudo obtener su ubicación.";
+          }
+        },
+        opts
+      );
+    }
+
+    // Dibujar ruta y luego ocultar panel
+    function calculateAndDisplayRoute() {
+      const startVal = startInput.value.trim();
+      const hasOrigin = startVal.length > 0;
+
+      if (!hasOrigin && !startMarker) {
+        alert("Ingrese su origen o use GPS.");
+        return;
+      }
+
+      statusEl.textContent = "Calculando ruta...";
+      clearRoute();
+
+      const originReq = hasOrigin ? startVal : (startMarker ? startMarker.getPosition() : startVal);
+      const destReq = (endInput.dataset.lat && endInput.dataset.lng)
+        ? new google.maps.LatLng(parseFloat(endInput.dataset.lat), parseFloat(endInput.dataset.lng))
+        : UPCONS_DESTINO_TEXTO;
+
+      directionsService.route({
+        origin: originReq,
+        destination: destReq,
+        travelMode: google.maps.TravelMode.DRIVING,
+        provideRouteAlternatives: false
+      }, (res, status) => {
+        if (status !== "OK" || !res.routes || !res.routes[0]) {
+          statusEl.textContent = "No se pudo calcular la ruta. Intente nuevamente.";
+          return;
+        }
+
+        const route = res.routes[0];
+        directionsRenderer.setDirections(res);
+
+        // Marcadores
+        const startLoc = route.legs[0].start_location;
+        startMarker = new google.maps.Marker({
+          map, position: startLoc, title: "Origen",
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6,
+                  fillColor: "#2563EB", fillOpacity: 1, strokeColor: "#1E3A8A", strokeWeight: 1 }
+        });
+
+        // Polilínea base
+        const path = route.overview_path;
+        guidePolyline = new google.maps.Polyline({
+          path, strokeColor: "#93C5FD", strokeOpacity: 0.7, strokeWeight: 6, map
+        });
+
+        // Polilínea animada rápida
+        animatedPolyline = new google.maps.Polyline({
+          map, strokeColor: "#EF4444", strokeOpacity: 0.95, strokeWeight: 6
+        });
+
+        let step = 0;
+        const stepsPerTick = Math.max(1, Math.floor(path.length / 180));
+        const tick = setInterval(() => {
+          if (step >= path.length) {
+            clearInterval(tick);
+            fitAll(startMarker.getPosition(), endMarker?.getPosition(), path);
+            // Guardar datos para navegación
+            lastOriginForNav = hasOrigin ? encodeURIComponent(startVal) : "Current+Location";
+            lastDestForNav = (endInput.dataset.lat && endInput.dataset.lng)
+              ? `${endInput.dataset.lat},${endInput.dataset.lng}`
+              : encodeURIComponent(UPCONS_DESTINO_TEXTO);
+
+            // Ocultar panel y mostrar botón de navegación
+            panel.classList.add('hidden');
+            navBtn.classList.remove('hidden');
+            navBtn.disabled = false;
+            return;
+          }
+          const currentPath = animatedPolyline.getPath();
+          for (let i = 0; i < stepsPerTick && step < path.length; i++, step++) {
+            currentPath.push(path[step]);
+          }
+        }, 20);
+      });
+    }
+
+    function openTurnByTurn() {
+      const origin = lastOriginForNav || "Current+Location";
+      const dest   = lastDestForNav || encodeURIComponent(UPCONS_DESTINO_TEXTO);
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${encodeURIComponent(dest)}&travelmode=driving&dir_action=navigate`;
+      window.open(url, "_blank");
+    }
+
+    function fitAll(startPos, endPos, path) {
+      const bounds = new google.maps.LatLngBounds();
+      if (startPos) bounds.extend(startPos);
+      if (endPos) bounds.extend(endPos);
+      if (Array.isArray(path)) path.forEach(p => bounds.extend(p));
+      map.fitBounds(bounds);
+    }
+
+    function clearRoute() {
+      if (guidePolyline) { guidePolyline.setMap(null); guidePolyline = null; }
+      if (animatedPolyline) { animatedPolyline.setMap(null); animatedPolyline = null; }
+      if (startMarker) { startMarker.setMap(null); startMarker = null; }
+      // endMarker se queda (UPCONS)
+      navBtn.classList.add('hidden');
+      navBtn.disabled = true;
+    }
+  </script>
+</body>
+</html>
