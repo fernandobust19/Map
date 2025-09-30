@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Ruta hacia UPCONS</title>
+  <title>Ruta hacia Sucursales UPCONS</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
@@ -17,9 +17,18 @@
   <script>
     // ===== TU CLAVE GOOGLE MAPS =====
     const GOOGLE_MAPS_API_KEY = "AIzaSyDNbUt1C8PHlkLkcGZlCdfNqtm7n-SvX_E"; // <-- Modo desarrollo (muestra marca de agua pero funciona)
-    // ===== DESTINO FIJO UPCONS =====
-    // Cambia el texto si actualizas dirección oficial.
-    const UPCONS_DESTINO_TEXTO = "UPCONS, Av. Mariscal Sucre y Arturo Tipanguano, Quito, Ecuador";
+    // ===== SUCURSALES UPCONS =====
+    const SUCURSALES = {
+      mariscal: {
+        nombre: "Sucursal: Mariscal Sucre y Arturo Tipanguano",
+        direccion: "UPCONS, Av. Mariscal Sucre y Arturo Tipanguano, Quito, Ecuador"
+      },
+      ecuatoriana: {
+        nombre: "Sucursal: La Ecuatoriana y Martin Icaza", 
+        direccion: "La Ecuatoriana y Martin Icaza, Quito, Ecuador",
+        coordenadas: { lat: -0.3071724, lng: -78.559899 }
+      }
+    };
     // ================================
 
     // Carga Maps + Places
@@ -39,7 +48,7 @@
     <div class="rounded-2xl shadow-2xl backdrop-blur bg-blue-900/55 border border-white/10 px-3 py-2">
       <div class="flex items-center justify-between">
         <h1 class="text-white text-base font-semibold tracking-wide">Ir a <span class="text-emerald-200">UPCONS</span></h1>
-        <button id="centerButton" class="text-white/90 text-xs px-2 py-1 rounded-md hover:bg-white/10">Ver UPCONS</button>
+        <button id="centerButton" class="text-white/90 text-xs px-2 py-1 rounded-md hover:bg-white/10">Ver Sucursal</button>
       </div>
 
       <!-- Campos súper cortos y pegados -->
@@ -58,8 +67,11 @@
 
       <div class="mt-2 grid grid-cols-12 gap-1">
         <div class="col-span-12">
-          <input id="end" type="text" value="UPCONS" readonly
-            class="w-full text-sm px-3 py-2 rounded-lg bg-white/70 border border-white/30 text-gray-700"/>
+          <select id="sucursalSelect" 
+            class="w-full text-sm px-3 py-2 rounded-lg bg-white/90 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-gray-700">
+            <option value="mariscal">Sucursal: Mariscal Sucre y Arturo Tipanguano</option>
+            <option value="ecuatoriana">Sucursal: La Ecuatoriana y Martin Icaza</option>
+          </select>
           <p id="destinoLabel" class="text-[11px] text-emerald-100 mt-1 line-clamp-2"></p>
         </div>
       </div>
@@ -93,7 +105,7 @@
     let guidePolyline, animatedPolyline, startMarker, endMarker, autocompleteStart;
 
     const startInput = document.getElementById('start');
-    const endInput   = document.getElementById('end');
+    const sucursalSelect = document.getElementById('sucursalSelect');
     const statusEl   = document.getElementById('status');
     const drawBtn    = document.getElementById('drawRouteButton');
     const gpsBtn     = document.getElementById('useLocationBtn');
@@ -111,7 +123,7 @@
         httpsHint.classList.remove('hidden');
       }
 
-      document.getElementById('destinoLabel').textContent = `Destino fijo: ${UPCONS_DESTINO_TEXTO}`;
+      updateDestinoLabel();
 
       map = new google.maps.Map(document.getElementById('map'), {
         zoom: 12,
@@ -140,21 +152,11 @@
       });
 
 
-      // Geocodificar destino UPCONS una sola vez
-      geocoder.geocode({ address: UPCONS_DESTINO_TEXTO }, (results, status) => {
-        if (status === "OK" && results[0]) {
-          const destLocation = results[0].geometry.location;
-          endMarker = new google.maps.Marker({
-            map, position: destLocation, title: "UPCONS",
-            icon: { path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, scale: 6,
-                    fillColor: "#60A5FA", fillOpacity: 1, strokeColor: "#1E3A8A", strokeWeight: 1 }
-          });
-          endInput.dataset.lat = destLocation.lat();
-          endInput.dataset.lng = destLocation.lng();
-        } else {
-          statusEl.textContent = "No se pudo fijar el destino UPCONS. Revise la dirección.";
-        }
-      });
+      // Geocodificar sucursal inicial (Mariscal Sucre)
+      updateSucursalMarker();
+      
+      // Evento para cambio de sucursal
+      sucursalSelect.addEventListener('change', updateSucursalMarker);
 
       // Eventos
       drawBtn.addEventListener('click', calculateAndDisplayRoute);
@@ -233,9 +235,11 @@
       const originReq = startMarker 
         ? startMarker.getPosition() 
         : startVal;
-      const destReq = (endInput.dataset.lat && endInput.dataset.lng)
-        ? new google.maps.LatLng(parseFloat(endInput.dataset.lat), parseFloat(endInput.dataset.lng))
-        : UPCONS_DESTINO_TEXTO;
+      
+      const sucursalSeleccionada = SUCURSALES[sucursalSelect.value];
+      const destReq = sucursalSeleccionada.coordenadas 
+        ? new google.maps.LatLng(sucursalSeleccionada.coordenadas.lat, sucursalSeleccionada.coordenadas.lng)
+        : sucursalSeleccionada.direccion;
 
       directionsService.route({
         origin: originReq,
@@ -288,9 +292,10 @@
             // Si se usó GPS, el origen es la ubicación actual para la navegación.
             // Si hay marcador GPS, el origen es "Current+Location", si no, es el texto del input.
             lastOriginForNav = (startMarker && !hasOrigin) ? "Current+Location" : encodeURIComponent(startVal);
-            lastDestForNav = (endInput.dataset.lat && endInput.dataset.lng)
-              ? `${endInput.dataset.lat},${endInput.dataset.lng}`
-              : encodeURIComponent(UPCONS_DESTINO_TEXTO);
+            const sucursalActual = SUCURSALES[sucursalSelect.value];
+            lastDestForNav = sucursalActual.coordenadas 
+              ? `${sucursalActual.coordenadas.lat},${sucursalActual.coordenadas.lng}`
+              : encodeURIComponent(sucursalActual.direccion);
 
             // Ocultar panel y mostrar botón de navegación
             panel.classList.add('hidden');
@@ -311,7 +316,7 @@
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
       const origin = lastOriginForNav || "Current+Location";
-      const dest   = lastDestForNav || encodeURIComponent(UPCONS_DESTINO_TEXTO);
+      const dest   = lastDestForNav || encodeURIComponent(SUCURSALES[sucursalSelect.value].direccion);
       let navUrl;
 
       if (isIOS) {
@@ -336,9 +341,65 @@
       if (guidePolyline) { guidePolyline.setMap(null); guidePolyline = null; }
       if (animatedPolyline) { animatedPolyline.setMap(null); animatedPolyline = null; }
       if (startMarker) { startMarker.setMap(null); startMarker = null; }
-      // endMarker se queda (UPCONS)
+      // endMarker se queda (sucursal seleccionada)
       navBtn.classList.add('hidden');
       navBtn.disabled = true;
+    }
+
+    function updateDestinoLabel() {
+      const sucursal = SUCURSALES[sucursalSelect.value];
+      document.getElementById('destinoLabel').textContent = `Destino: ${sucursal.direccion}`;
+    }
+
+    function updateSucursalMarker() {
+      const sucursal = SUCURSALES[sucursalSelect.value];
+      
+      // Eliminar marcador anterior si existe
+      if (endMarker) {
+        endMarker.setMap(null);
+      }
+      
+      if (sucursal.coordenadas) {
+        // Usar coordenadas directas para La Ecuatoriana
+        const destLocation = new google.maps.LatLng(sucursal.coordenadas.lat, sucursal.coordenadas.lng);
+        endMarker = new google.maps.Marker({
+          map, 
+          position: destLocation, 
+          title: sucursal.nombre,
+          icon: { 
+            path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, 
+            scale: 6,
+            fillColor: "#60A5FA", 
+            fillOpacity: 1, 
+            strokeColor: "#1E3A8A", 
+            strokeWeight: 1 
+          }
+        });
+        updateDestinoLabel();
+      } else {
+        // Geocodificar para Mariscal Sucre
+        geocoder.geocode({ address: sucursal.direccion }, (results, status) => {
+          if (status === "OK" && results[0]) {
+            const destLocation = results[0].geometry.location;
+            endMarker = new google.maps.Marker({
+              map, 
+              position: destLocation, 
+              title: sucursal.nombre,
+              icon: { 
+                path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW, 
+                scale: 6,
+                fillColor: "#60A5FA", 
+                fillOpacity: 1, 
+                strokeColor: "#1E3A8A", 
+                strokeWeight: 1 
+              }
+            });
+            updateDestinoLabel();
+          } else {
+            statusEl.textContent = `No se pudo fijar el destino ${sucursal.nombre}. Revise la dirección.`;
+          }
+        });
+      }
     }
   </script>
 </body>
