@@ -12,6 +12,12 @@
     .nav-fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 20; }
     /* Corrige z-index del autocompletado */
     .pac-container { z-index: 50 !important; }
+    /* Estilo para botones de sucursal activos */
+    .sucursal-btn.active { 
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); 
+      transform: scale(1.02);
+      transition: all 0.2s ease;
+    }
   </style>
 
   <script>
@@ -51,29 +57,33 @@
         <button id="centerButton" class="text-white/90 text-xs px-2 py-1 rounded-md hover:bg-white/10">Ver Sucursal</button>
       </div>
 
-      <!-- Campos súper cortos y pegados -->
-      <div class="mt-2 grid grid-cols-12 gap-1">
-        <div class="col-span-8">
+      <!-- Campo de origen -->
+      <div class="mt-2 grid grid-cols-12 gap-2">
+        <div class="col-span-7">
           <input id="start" type="text" placeholder="Su origen (dirección o lugar)"
             class="w-full text-sm px-3 py-2 rounded-lg bg-white/90 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-gray-500"/>
         </div>
-        <div class="col-span-4 flex">
+        <div class="col-span-5 flex">
           <button id="useLocationBtn" title="Usar mi ubicación"
-            class="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-1">
-            Usar mi ubicación
+            class="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-2">
+            📍 Mi ubicación
           </button>
         </div>
       </div>
 
-      <div class="mt-2 grid grid-cols-12 gap-1">
-        <div class="col-span-12">
-          <select id="sucursalSelect" 
-            class="w-full text-sm px-3 py-2 rounded-lg bg-white/90 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 text-gray-700">
-            <option value="mariscal">Sucursal: Mariscal Sucre y Arturo Tipanguano</option>
-            <option value="ecuatoriana">Sucursal: La Ecuatoriana y Martin Icaza</option>
-          </select>
-          <p id="destinoLabel" class="text-[11px] text-emerald-100 mt-1 line-clamp-2"></p>
+      <div class="mt-2">
+        <p class="text-[11px] text-emerald-100 mb-2">Seleccione la sucursal de destino:</p>
+        <div class="grid grid-cols-1 gap-2">
+          <button id="btnMariscal" 
+            class="sucursal-btn active w-full text-sm px-3 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-medium border-2 border-indigo-300">
+            Sucursal: Mariscal Sucre y Arturo Tipanguano
+          </button>
+          <button id="btnEcuatoriana" 
+            class="sucursal-btn w-full text-sm px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-medium border-2 border-white/30">
+            Sucursal: La Ecuatoriana y Martin Icaza
+          </button>
         </div>
+        <p id="destinoLabel" class="text-[11px] text-emerald-100 mt-2 line-clamp-2"></p>
       </div>
 
       <div class="mt-2 flex gap-1">
@@ -105,7 +115,8 @@
     let guidePolyline, animatedPolyline, startMarker, endMarker, autocompleteStart;
 
     const startInput = document.getElementById('start');
-    const sucursalSelect = document.getElementById('sucursalSelect');
+    const btnMariscal = document.getElementById('btnMariscal');
+    const btnEcuatoriana = document.getElementById('btnEcuatoriana');
     const statusEl   = document.getElementById('status');
     const drawBtn    = document.getElementById('drawRouteButton');
     const gpsBtn     = document.getElementById('useLocationBtn');
@@ -113,6 +124,8 @@
     const panel      = document.getElementById('panel');
     const navBtn     = document.getElementById('navigateButton');
     const httpsHint  = document.getElementById('httpsHint');
+
+    let sucursalSeleccionada = 'mariscal'; // Por defecto Mariscal Sucre
 
     let lastOriginForNav = null; // "Current+Location" o dirección encodeada
     let lastDestForNav   = null; // "lat,lng" o texto encodeado
@@ -155,8 +168,9 @@
       // Geocodificar sucursal inicial (Mariscal Sucre)
       updateSucursalMarker();
       
-      // Evento para cambio de sucursal
-      sucursalSelect.addEventListener('change', updateSucursalMarker);
+      // Eventos para botones de sucursales
+      btnMariscal.addEventListener('click', () => selectSucursal('mariscal'));
+      btnEcuatoriana.addEventListener('click', () => selectSucursal('ecuatoriana'));
 
       // Eventos
       drawBtn.addEventListener('click', calculateAndDisplayRoute);
@@ -236,10 +250,10 @@
         ? startMarker.getPosition() 
         : startVal;
       
-      const sucursalSeleccionada = SUCURSALES[sucursalSelect.value];
-      const destReq = sucursalSeleccionada.coordenadas 
-        ? new google.maps.LatLng(sucursalSeleccionada.coordenadas.lat, sucursalSeleccionada.coordenadas.lng)
-        : sucursalSeleccionada.direccion;
+      const sucursalActual = SUCURSALES[sucursalSeleccionada];
+      const destReq = sucursalActual.coordenadas 
+        ? new google.maps.LatLng(sucursalActual.coordenadas.lat, sucursalActual.coordenadas.lng)
+        : sucursalActual.direccion;
 
       directionsService.route({
         origin: originReq,
@@ -292,10 +306,10 @@
             // Si se usó GPS, el origen es la ubicación actual para la navegación.
             // Si hay marcador GPS, el origen es "Current+Location", si no, es el texto del input.
             lastOriginForNav = (startMarker && !hasOrigin) ? "Current+Location" : encodeURIComponent(startVal);
-            const sucursalActual = SUCURSALES[sucursalSelect.value];
-            lastDestForNav = sucursalActual.coordenadas 
-              ? `${sucursalActual.coordenadas.lat},${sucursalActual.coordenadas.lng}`
-              : encodeURIComponent(sucursalActual.direccion);
+            const sucursalParaNav = SUCURSALES[sucursalSeleccionada];
+            lastDestForNav = sucursalParaNav.coordenadas 
+              ? `${sucursalParaNav.coordenadas.lat},${sucursalParaNav.coordenadas.lng}`
+              : encodeURIComponent(sucursalParaNav.direccion);
 
             // Ocultar panel y mostrar botón de navegación
             panel.classList.add('hidden');
@@ -316,7 +330,7 @@
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
       const origin = lastOriginForNav || "Current+Location";
-      const dest   = lastDestForNav || encodeURIComponent(SUCURSALES[sucursalSelect.value].direccion);
+      const dest   = lastDestForNav || encodeURIComponent(SUCURSALES[sucursalSeleccionada].direccion);
       let navUrl;
 
       if (isIOS) {
@@ -340,19 +354,35 @@
     function clearRoute() {
       if (guidePolyline) { guidePolyline.setMap(null); guidePolyline = null; }
       if (animatedPolyline) { animatedPolyline.setMap(null); animatedPolyline = null; }
-      if (startMarker) { startMarker.setMap(null); startMarker = null; }
+      // NO eliminamos startMarker aquí para preservar la ubicación GPS
       // endMarker se queda (sucursal seleccionada)
       navBtn.classList.add('hidden');
       navBtn.disabled = true;
     }
 
+    function selectSucursal(tipo) {
+      sucursalSeleccionada = tipo;
+      
+      // Actualizar estilos de botones
+      document.querySelectorAll('.sucursal-btn').forEach(btn => {
+        btn.classList.remove('active', 'bg-indigo-500', 'hover:bg-indigo-600', 'border-indigo-300');
+        btn.classList.add('bg-white/20', 'hover:bg-white/30', 'border-white/30');
+      });
+      
+      const btnActivo = tipo === 'mariscal' ? btnMariscal : btnEcuatoriana;
+      btnActivo.classList.remove('bg-white/20', 'hover:bg-white/30', 'border-white/30');
+      btnActivo.classList.add('active', 'bg-indigo-500', 'hover:bg-indigo-600', 'border-indigo-300');
+      
+      updateSucursalMarker();
+    }
+
     function updateDestinoLabel() {
-      const sucursal = SUCURSALES[sucursalSelect.value];
+      const sucursal = SUCURSALES[sucursalSeleccionada];
       document.getElementById('destinoLabel').textContent = `Destino: ${sucursal.direccion}`;
     }
 
     function updateSucursalMarker() {
-      const sucursal = SUCURSALES[sucursalSelect.value];
+      const sucursal = SUCURSALES[sucursalSeleccionada];
       
       // Eliminar marcador anterior si existe
       if (endMarker) {
